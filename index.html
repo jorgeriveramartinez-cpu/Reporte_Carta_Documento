@@ -1,31 +1,429 @@
-<script>
-const WEBHOOK_URL = "https://n8nappv2.ocasa.com:5688/webhook-test/sla-chat";
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tablero SLA - Logística</title>
 
-async function enviarMensaje(){
-  const input = document.getElementById("chatInput");
-  const texto = input.value.trim();
-  if(!texto) return;
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  agregarMensaje(texto, "user");
-  input.value = "";
+  <style>
+    :root{
+      --verde:#1ea97c;
+      --verde-claro:#d7f3e6;
+      --amarillo:#f2c14e;
+      --amarillo-claro:#fdf1d3;
+      --rojo:#e25555;
+      --rojo-claro:#fbe1e1;
+      --azul:#2c3e50;
+      --gris-fondo:#f4f6f8;
+      --borde:#e2e6ea;
+    }
 
-  const typingEl = agregarTyping();
+    *{box-sizing:border-box;}
 
-  try{
-    const resp = await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ pregunta: texto })
+    body{
+      margin:0;
+      font-family:Segoe UI, Arial, sans-serif;
+      background:var(--gris-fondo);
+      color:#1c1c1c;
+    }
+
+    header{
+      background:var(--azul);
+      color:#fff;
+      padding:18px 24px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    header h1{
+      margin:0;
+      font-size:20px;
+    }
+
+    header span{
+      font-size:13px;
+      opacity:.85;
+    }
+
+    .container{
+      max-width:1200px;
+      margin:0 auto;
+      padding:20px;
+      display:grid;
+      grid-template-columns:2fr 1fr;
+      gap:20px;
+    }
+
+    @media (max-width:900px){
+      .container{grid-template-columns:1fr;}
+    }
+
+    .card{
+      background:#fff;
+      border:1px solid var(--borde);
+      border-radius:10px;
+      padding:16px;
+      margin-bottom:20px;
+      box-shadow:0 1px 3px rgba(0,0,0,.04);
+    }
+
+    .card h2{
+      margin:0 0 12px;
+      font-size:15px;
+      color:var(--azul);
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+    }
+
+    th,td{
+      padding:8px 10px;
+      text-align:center;
+      border-bottom:1px solid var(--borde);
+    }
+
+    th{
+      background:#f0f2f5;
+      color:var(--azul);
+      font-weight:600;
+    }
+
+    td:first-child, th:first-child{text-align:left;}
+
+    .pill{
+      display:inline-block;
+      padding:3px 8px;
+      border-radius:6px;
+      font-weight:600;
+      min-width:46px;
+    }
+
+    .ok{background:var(--verde-claro);color:#0d6b4d;}
+    .warn{background:var(--amarillo-claro);color:#8a6500;}
+    .bad{background:var(--rojo-claro);color:#a31d1d;}
+
+    .chat-card{
+      display:flex;
+      flex-direction:column;
+      min-height:560px;
+      height:560px;
+    }
+
+    .chat-messages{
+      flex:1;
+      overflow-y:auto;
+      padding:8px 4px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .msg{
+      max-width:85%;
+      padding:10px 12px;
+      border-radius:10px;
+      font-size:14px;
+      line-height:1.4;
+      white-space:pre-wrap;
+    }
+
+    .msg.bot{
+      background:#eef2f5;
+      align-self:flex-start;
+      border:1px solid var(--borde);
+    }
+
+    .msg.user{
+      background:var(--verde);
+      color:#fff;
+      align-self:flex-end;
+    }
+
+    .chat-input{
+      display:flex;
+      gap:8px;
+      margin-top:10px;
+    }
+
+    .chat-input input{
+      flex:1;
+      padding:10px 12px;
+      border:1px solid var(--borde);
+      border-radius:8px;
+      font-size:14px;
+    }
+
+    .chat-input button{
+      background:var(--azul);
+      color:#fff;
+      border:none;
+      border-radius:8px;
+      padding:0 18px;
+      cursor:pointer;
+      font-weight:600;
+    }
+
+    .chat-input button:hover{opacity:.9;}
+
+    .typing{
+      font-size:12px;
+      color:#888;
+      font-style:italic;
+      padding-left:4px;
+    }
+
+    .error-box{
+      color:#a31d1d;
+      background:#fbe1e1;
+      border:1px solid #f3b7b7;
+      padding:10px;
+      border-radius:8px;
+      font-size:13px;
+      margin-top:10px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>📦 Tablero de SLA - Logística</h1>
+    <span id="last-update">Datos de ejemplo | Conectado a n8n</span>
+  </header>
+
+  <main class="container">
+    <section>
+      <div class="card">
+        <h2>#Shipment & SLA por fecha de vencimiento</h2>
+        <canvas id="chartMensual" height="160"></canvas>
+        <div id="chartError"></div>
+      </div>
+
+      <div class="card">
+        <h2>SLA por Provincia</h2>
+        <table id="tablaProvincia">
+          <thead>
+            <tr>
+              <th>Provincia</th>
+              <th>Share</th>
+              <th>SLA</th>
+              <th>+24h</th>
+              <th>+48h</th>
+              <th>+72h</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="card chat-card">
+      <h2>💬 Preguntale al reporte</h2>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg bot">
+¡Hola! Preguntame sobre el cumplimiento de SLA, provincia, marca o mes.
+
+Ejemplo:
+¿Cuál es el % de SLA de Buenos Aires?
+        </div>
+      </div>
+
+      <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="Escribí tu pregunta..." />
+        <button id="sendBtn" type="button">Enviar</button>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const WEBHOOK_URL = "https://n8nappv2.ocasa.com:5688/webhook-test/sla-chat";
+
+    const dataMensual = {
+      labels: ["enero", "febrero", "marzo", "abril", "mayo", "junio"],
+      shipments: [400, 1100, 3200, 1800, 2100, 2500],
+      sla: [0, 36.7, 21.7, 36.8, 64.9, 76.3]
+    };
+
+    const dataProvincia = [
+      {provincia:"Capital Federal", share:"78,28%", sla:44.8, h24:74.8, h48:79.5, h72:83.6},
+      {provincia:"Buenos Aires", share:"16,10%", sla:44.7, h24:71.3, h48:80.6, h72:88.0},
+      {provincia:"Chubut", share:"3,90%", sla:90.4, h24:97.1, h48:95.7, h72:97.9},
+      {provincia:"Santa Fe", share:"0,44%", sla:89.5, h24:95.7, h48:95.7, h72:97.9},
+      {provincia:"Salta", share:"0,16%", sla:94.1, h24:94.1, h48:94.1, h72:94.1}
+    ];
+
+    function colorSLA(valor){
+      if(valor >= 90) return "ok";
+      if(valor >= 60) return "warn";
+      return "bad";
+    }
+
+    function renderTabla(){
+      const tbody = document.querySelector("#tablaProvincia tbody");
+      tbody.innerHTML = "";
+
+      dataProvincia.forEach(row => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${row.provincia}</td>
+          <td>${row.share}</td>
+          <td><span class="pill ${colorSLA(row.sla)}">${row.sla.toFixed(1)}%</span></td>
+          <td><span class="pill ${colorSLA(row.h24)}">${row.h24.toFixed(1)}%</span></td>
+          <td><span class="pill ${colorSLA(row.h48)}">${row.h48.toFixed(1)}%</span></td>
+          <td><span class="pill ${colorSLA(row.h72)}">${row.h72.toFixed(1)}%</span></td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderGrafico(){
+      const chartError = document.getElementById("chartError");
+
+      if(typeof Chart === "undefined"){
+        chartError.innerHTML = '<div class="error-box">⚠️ No se pudo cargar Chart.js. Revisá la conexión a internet o el CDN.</div>';
+        return;
+      }
+
+      const ctx = document.getElementById("chartMensual").getContext("2d");
+
+      new Chart(ctx, {
+        data: {
+          labels: dataMensual.labels,
+          datasets: [
+            {
+              type:"bar",
+              label:"#Shipment",
+              data:dataMensual.shipments,
+              backgroundColor:"#1ea97c",
+              yAxisID:"y"
+            },
+            {
+              type:"line",
+              label:"SLA %",
+              data:dataMensual.sla,
+              borderColor:"#2c3e50",
+              backgroundColor:"#2c3e50",
+              yAxisID:"y1",
+              tension:.3
+            }
+          ]
+        },
+        options:{
+          responsive:true,
+          interaction:{mode:"index", intersect:false},
+          scales:{
+            y:{
+              position:"left",
+              title:{display:true, text:"#Shipment"}
+            },
+            y1:{
+              position:"right",
+              min:0,
+              max:100,
+              grid:{drawOnChartArea:false},
+              title:{display:true, text:"SLA %"}
+            }
+          }
+        }
+      });
+    }
+
+    async function enviarMensaje(){
+      const input = document.getElementById("chatInput");
+      const texto = input.value.trim();
+
+      if(!texto) return;
+
+      agregarMensaje(texto, "user");
+      input.value = "";
+
+      const typingEl = agregarTyping();
+
+      try{
+        const resp = await fetch(WEBHOOK_URL, {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify({
+            pregunta:texto,
+            origen:"github-pages",
+            proyecto:"Reporte_Carta_Documento"
+          })
+        });
+
+        if(!resp.ok){
+          throw new Error("HTTP " + resp.status);
+        }
+
+        const data = await resp.json();
+        typingEl.remove();
+
+        const respuesta =
+          data.respuesta ||
+          data.answer ||
+          data.output ||
+          data.text ||
+          "El webhook respondió, pero no encontré el campo 'respuesta'.";
+
+        agregarMensaje(respuesta, "bot");
+
+      }catch(err){
+        typingEl.remove();
+
+        agregarMensaje(
+          "⚠️ No pude conectarme al webhook de n8n. Verificá que el workflow esté activo o escuchando en modo Test. Error: " + err.message,
+          "bot"
+        );
+      }
+    }
+
+    function agregarMensaje(texto, tipo){
+      const cont = document.getElementById("chatMessages");
+      const div = document.createElement("div");
+
+      div.className = "msg " + tipo;
+      div.textContent = texto;
+
+      cont.appendChild(div);
+      cont.scrollTop = cont.scrollHeight;
+    }
+
+    function agregarTyping(){
+      const cont = document.getElementById("chatMessages");
+      const div = document.createElement("div");
+
+      div.className = "typing";
+      div.textContent = "Escribiendo...";
+
+      cont.appendChild(div);
+      cont.scrollTop = cont.scrollHeight;
+
+      return div;
+    }
+
+    document.addEventListener("DOMContentLoaded", function(){
+      renderTabla();
+      renderGrafico();
+
+      document.getElementById("sendBtn").addEventListener("click", enviarMensaje);
+
+      document.getElementById("chatInput").addEventListener("keydown", function(e){
+        if(e.key === "Enter"){
+          enviarMensaje();
+        }
+      });
     });
-
-    const data = await resp.json();
-
-    typingEl.remove();
-    agregarMensaje(data.respuesta || "No obtuve respuesta del servidor.", "bot");
-
-  }catch(err){
-    typingEl.remove();
-    agregarMensaje("⚠️ No pude conectarme al chatbot todavía. Estamos configurando el flujo de n8n.", "bot");
-  }
-}
-</script>
+  </script>
+</body>
+</html>

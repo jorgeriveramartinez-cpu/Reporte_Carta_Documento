@@ -85,7 +85,6 @@
   .warn{background:var(--amarillo-claro); color:#8a6500;}
   .bad{background:var(--rojo-claro); color:#a31d1d;}
 
-  /* Chat */
   .chat-card{display:flex;flex-direction:column;height:560px;}
   .chat-messages{
     flex:1;
@@ -204,52 +203,50 @@ function colorSLA(valor){
   return {bg:"bad"};
 }
 
-const ctx = document.getElementById('chartMensual').getContext('2d');
-new Chart(ctx, {
-  data: {
-    labels: dataMensual.labels,
-    datasets: [
-      {
-        type:'bar',
-        label:'#Shipment',
-        data: dataMensual.shipments,
-        backgroundColor: '#1ea97c',
-        yAxisID:'y'
-      },
-      {
-        type:'line',
-        label:'SLA %',
-        data: dataMensual.sla,
-        borderColor:'#2c3e50',
-        backgroundColor:'#2c3e50',
-        yAxisID:'y1',
-        tension:.3
-      }
-    ]
-  },
-  options:{
-    responsive:true,
-    interaction:{mode:'index', intersect:false},
-    scales:{
-      y:{ position:'left', title:{display:true, text:'#Shipment'} },
-      y1:{ position:'right', grid:{drawOnChartArea:false}, title:{display:true, text:'SLA %'} }
-    }
-  }
-});
+try{
+  const tbody = document.querySelector("#tablaProvincia tbody");
+  dataProvincia.forEach(row=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${row.provincia}</td>
+      <td>${row.share}</td>
+      <td><span class="pill ${colorSLA(row.sla).bg}">${row.sla.toFixed(1)}%</span></td>
+      <td><span class="pill ${colorSLA(row.h24).bg}">${row.h24.toFixed(1)}%</span></td>
+      <td><span class="pill ${colorSLA(row.h48).bg}">${row.h48.toFixed(1)}%</span></td>
+      <td><span class="pill ${colorSLA(row.h72).bg}">${row.h72.toFixed(1)}%</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}catch(e){
+  console.error("Error renderizando tabla:", e);
+}
 
-const tbody = document.querySelector("#tablaProvincia tbody");
-dataProvincia.forEach(row=>{
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${row.provincia}</td>
-    <td>${row.share}</td>
-    <td><span class="pill ${colorSLA(row.sla).bg}">${row.sla.toFixed(1)}%</span></td>
-    <td><span class="pill ${colorSLA(row.h24).bg}">${row.h24.toFixed(1)}%</span></td>
-    <td><span class="pill ${colorSLA(row.h48).bg}">${row.h48.toFixed(1)}%</span></td>
-    <td><span class="pill ${colorSLA(row.h72).bg}">${row.h72.toFixed(1)}%</span></td>
-  `;
-  tbody.appendChild(tr);
-});
+try{
+  if(typeof Chart === "undefined"){
+    throw new Error("Chart.js no se cargó");
+  }
+  const ctx = document.getElementById('chartMensual').getContext('2d');
+  new Chart(ctx, {
+    data: {
+      labels: dataMensual.labels,
+      datasets: [
+        { type:'bar', label:'#Shipment', data: dataMensual.shipments, backgroundColor: '#1ea97c', yAxisID:'y' },
+        { type:'line', label:'SLA %', data: dataMensual.sla, borderColor:'#2c3e50', backgroundColor:'#2c3e50', yAxisID:'y1', tension:.3 }
+      ]
+    },
+    options:{
+      responsive:true,
+      interaction:{mode:'index', intersect:false},
+      scales:{
+        y:{ position:'left', title:{display:true, text:'#Shipment'} },
+        y1:{ position:'right', grid:{drawOnChartArea:false}, title:{display:true, text:'SLA %'} }
+      }
+    }
+  });
+}catch(e){
+  console.error("Error renderizando gráfico:", e);
+  document.getElementById('chartMensual').insertAdjacentHTML('afterend', '<p style="color:#a31d1d;font-size:13px;">⚠️ No se pudo cargar el gráfico.</p>');
+}
 
 const WEBHOOK_URL = "https://TU-INSTANCIA-N8N.app.n8n.cloud/webhook/sla-chat";
 
@@ -292,3 +289,15 @@ function agregarTyping(){
   const div = document.createElement("div");
   div.className = "typing";
   div.textContent = "Escribiendo...";
+  cont.appendChild(div);
+  cont.scrollTop = cont.scrollHeight;
+  return div;
+}
+
+document.getElementById("chatInput").addEventListener("keypress", function(e){
+  if(e.key === "Enter") enviarMensaje();
+});
+</script>
+
+</body>
+</html>
